@@ -6,13 +6,13 @@ GAP = 200000000
 NUM_SENSOR = 2000
 NUM_EVENT_PER_SENSOR = 50000
 
-OUTFILE_PATH = "poisson_timestamps.csv"
+OUTFILE_PATH = "poisson_timestamps_newq.csv"
 
 f_out = open(OUTFILE_PATH, 'w')
 
 for i in range(0, NUM_SENSOR) :
     data = np.random.poisson(GAP, NUM_EVENT_PER_SENSOR)
-    start_point = randint(0, GAP)
+    start_point = randint(0, NUM_SENSOR)
     data[0] = start_point
     for j in range(1, NUM_EVENT_PER_SENSOR) :
         data[j] += data[j-1]

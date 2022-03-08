@@ -568,8 +568,11 @@ void GenerateRandomIndexEntriesGoodSeparators(
   //     new InternalKeyComparator(BytewiseComparator()));
   for (auto it = keys.begin(); it != keys.end();) {
     std::string prev = *it;
+    std::cout << std::hex << prev << std::endl;
     first_keys->emplace_back(*it++);
     BytewiseComparator()->FindShortestSeparator(&prev, *it);
+    std::cout << std::hex << prev << std::endl;
+    std::cout << std::hex << *it << std::endl;
     it++;
     separators->emplace_back(prev);
     uint64_t size = 0;
@@ -621,98 +624,101 @@ TEST_P(IndexBlockTest, IndexBlockSizeTest) {
   std::cout << "compressed size: " << rawblock.size() << std::endl;
 }
 
-TEST_P(IndexBlockTest, IndexValueEncodingTest) {
-  Random rnd(301);
-  Options options = Options();
+// TEST_P(IndexBlockTest, IndexValueEncodingTest) {
+//   Random rnd(301);
+//   Options options = Options();
 
-  std::vector<std::string> separators;
-  std::vector<BlockHandle> block_handles;
-  std::vector<std::string> first_keys;
-  const bool kUseDeltaEncoding = true;
-  BlockBuilder builder(16, kUseDeltaEncoding, useValueDeltaEncoding());
-  int num_records = 100;
+//   std::vector<std::string> separators;
+//   std::vector<BlockHandle> block_handles;
+//   std::vector<std::string> first_keys;
+//   const bool kUseDeltaEncoding = true;
+//   BlockBuilder builder(16, kUseDeltaEncoding, useValueDeltaEncoding());
+//   int num_records = 100;
 
-  GenerateRandomIndexEntries(&separators, &block_handles, &first_keys,
-                             num_records);
-  BlockHandle last_encoded_handle;
-  for (int i = 0; i < num_records; i++) {
-    IndexValue entry(block_handles[i], first_keys[i]);
-    std::string encoded_entry;
-    std::string delta_encoded_entry;
-    entry.EncodeTo(&encoded_entry, includeFirstKey(), nullptr);
-    if (useValueDeltaEncoding() && i > 0) {
-      entry.EncodeTo(&delta_encoded_entry, includeFirstKey(),
-                     &last_encoded_handle);
-    }
-    last_encoded_handle = entry.handle;
-    const Slice delta_encoded_entry_slice(delta_encoded_entry);
-    builder.Add(separators[i], encoded_entry, &delta_encoded_entry_slice);
-  }
-  if (includeFirstKey())
-    // varint32 used to save first_key_size, so it actually takes only 1 byte
-    // instead of 4.
-    std::cout << "uncompressed size: " << (12 + 16 + 12 + 4) * num_records
-              << std::endl;
+//   GenerateRandomIndexEntries(&separators, &block_handles, &first_keys,
+//                              num_records);
+//   BlockHandle last_encoded_handle;
+//   for (int i = 0; i < num_records; i++) {
+//     IndexValue entry(block_handles[i], first_keys[i]);
+//     std::string encoded_entry;
+//     std::string delta_encoded_entry;
+//     entry.EncodeTo(&encoded_entry, includeFirstKey(), nullptr);
+//     if (useValueDeltaEncoding() && i > 0) {
+//       entry.EncodeTo(&delta_encoded_entry, includeFirstKey(),
+//                      &last_encoded_handle);
+//     }
+//     last_encoded_handle = entry.handle;
+//     const Slice delta_encoded_entry_slice(delta_encoded_entry);
+//     builder.Add(separators[i], encoded_entry, &delta_encoded_entry_slice);
+//   }
+//   if (includeFirstKey())
+//     // varint32 used to save first_key_size, so it actually takes only 1 byte
+//     // instead of 4.
+//     std::cout << "uncompressed size: " << (12 + 16 + 12 + 4) * num_records
+//               << std::endl;
 
-  else
-    std::cout << "uncompressed size: " << (12 + 3) * num_records << std::endl;
+//   else
+//     std::cout << "uncompressed size: " << (12 + 3) * num_records <<
+//     std::endl;
 
-  // read serialized contents of the block
-  Slice rawblock = builder.Finish();
-  std::cout << "compressed size: " << rawblock.size() << std::endl;
+//   // read serialized contents of the block
+//   Slice rawblock = builder.Finish();
+//   std::cout << "compressed size: " << rawblock.size() << std::endl;
 
-  // create block reader
-  BlockContents contents;
-  contents.data = rawblock;
-  Block reader(std::move(contents));
+//   // create block reader
+//   BlockContents contents;
+//   contents.data = rawblock;
+//   Block reader(std::move(contents));
 
-  const bool kTotalOrderSeek = true;
-  const bool kIncludesSeq = true;
-  const bool kValueIsFull = !useValueDeltaEncoding();
-  IndexBlockIter *kNullIter = nullptr;
-  Statistics *kNullStats = nullptr;
-  // read contents of block sequentially
-  InternalIteratorBase<IndexValue> *iter = reader.NewIndexIterator(
-      options.comparator, kDisableGlobalSequenceNumber, kNullIter, kNullStats,
-      kTotalOrderSeek, includeFirstKey(), kIncludesSeq, kValueIsFull);
-  iter->SeekToFirst();
-  for (int index = 0; index < num_records; ++index) {
-    ASSERT_TRUE(iter->Valid());
+//   const bool kTotalOrderSeek = true;
+//   const bool kIncludesSeq = true;
+//   const bool kValueIsFull = !useValueDeltaEncoding();
+//   IndexBlockIter *kNullIter = nullptr;
+//   Statistics *kNullStats = nullptr;
+//   // read contents of block sequentially
+//   InternalIteratorBase<IndexValue> *iter = reader.NewIndexIterator(
+//       options.comparator, kDisableGlobalSequenceNumber, kNullIter,
+//       kNullStats, kTotalOrderSeek, includeFirstKey(), kIncludesSeq,
+//       kValueIsFull);
+//   iter->SeekToFirst();
+//   for (int index = 0; index < num_records; ++index) {
+//     ASSERT_TRUE(iter->Valid());
 
-    Slice k = iter->key();
-    IndexValue v = iter->value();
+//     Slice k = iter->key();
+//     IndexValue v = iter->value();
 
-    EXPECT_EQ(separators[index], k.ToString());
-    EXPECT_EQ(block_handles[index].offset(), v.handle.offset());
-    EXPECT_EQ(block_handles[index].size(), v.handle.size());
-    EXPECT_EQ(includeFirstKey() ? first_keys[index] : "",
-              v.first_internal_key.ToString());
+//     EXPECT_EQ(separators[index], k.ToString());
+//     EXPECT_EQ(block_handles[index].offset(), v.handle.offset());
+//     EXPECT_EQ(block_handles[index].size(), v.handle.size());
+//     EXPECT_EQ(includeFirstKey() ? first_keys[index] : "",
+//               v.first_internal_key.ToString());
 
-    iter->Next();
-  }
-  delete iter;
+//     iter->Next();
+//   }
+//   delete iter;
 
-  // read block contents randomly
-  iter = reader.NewIndexIterator(
-      options.comparator, kDisableGlobalSequenceNumber, kNullIter, kNullStats,
-      kTotalOrderSeek, includeFirstKey(), kIncludesSeq, kValueIsFull);
-  for (int i = 0; i < num_records * 2; i++) {
-    // find a random key in the lookaside array
-    int index = rnd.Uniform(num_records);
-    Slice k(separators[index]);
+//   // read block contents randomly
+//   iter = reader.NewIndexIterator(
+//       options.comparator, kDisableGlobalSequenceNumber, kNullIter,
+//       kNullStats, kTotalOrderSeek, includeFirstKey(), kIncludesSeq,
+//       kValueIsFull);
+//   for (int i = 0; i < num_records * 2; i++) {
+//     // find a random key in the lookaside array
+//     int index = rnd.Uniform(num_records);
+//     Slice k(separators[index]);
 
-    // search in block for this key
-    iter->Seek(k);
-    ASSERT_TRUE(iter->Valid());
-    IndexValue v = iter->value();
-    EXPECT_EQ(separators[index], iter->key().ToString());
-    EXPECT_EQ(block_handles[index].offset(), v.handle.offset());
-    EXPECT_EQ(block_handles[index].size(), v.handle.size());
-    EXPECT_EQ(includeFirstKey() ? first_keys[index] : "",
-              v.first_internal_key.ToString());
-  }
-  delete iter;
-}
+//     // search in block for this key
+//     iter->Seek(k);
+//     ASSERT_TRUE(iter->Valid());
+//     IndexValue v = iter->value();
+//     EXPECT_EQ(separators[index], iter->key().ToString());
+//     EXPECT_EQ(block_handles[index].offset(), v.handle.offset());
+//     EXPECT_EQ(block_handles[index].size(), v.handle.size());
+//     EXPECT_EQ(includeFirstKey() ? first_keys[index] : "",
+//               v.first_internal_key.ToString());
+//   }
+//   delete iter;
+// }
 
 INSTANTIATE_TEST_CASE_P(P, IndexBlockTest,
                         ::testing::Values(std::make_tuple(false, false),

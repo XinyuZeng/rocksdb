@@ -76,10 +76,19 @@ void init(const std::string& key_path, const std::string& db_path,
   }
 
   // table_options->block_cache = rocksdb::NewLRUCache(10 * 1048576);
-  table_options->block_cache = rocksdb::NewLRUCache(1000 * 1048576);
+  // table_options->block_cache = rocksdb::NewLRUCache(1000 * 1048576);
 
-  table_options->pin_l0_filter_and_index_blocks_in_cache = true;
-  table_options->cache_index_and_filter_blocks = true;
+  // table_options->pin_l0_filter_and_index_blocks_in_cache = true;
+  // table_options->cache_index_and_filter_blocks = true;
+
+  // begin index block tuning
+  table_options->index_block_restart_interval = 1;
+  table_options->enable_index_compression = false;
+  // table_options->format_version = 5;
+  // table_options->block_size = 16 * 1024;
+  // disable shortest separator
+  table_options->index_shortening =
+      rocksdb::BlockBasedTableOptions::IndexShorteningMode::kNoShortening;
 
   options->table_factory.reset(
       rocksdb::NewBlockBasedTableFactory(*table_options));
@@ -87,9 +96,9 @@ void init(const std::string& key_path, const std::string& db_path,
   options->max_open_files = -1;  // pre-load indexes and filters
 
   // 2GB config
-  options->write_buffer_size = 2 * 1048576;
-  options->max_bytes_for_level_base = 10 * 1048576;
-  options->target_file_size_base = 2 * 1048576;
+  // options->write_buffer_size = 2 * 1048576;
+  // options->max_bytes_for_level_base = 10 * 1048576;
+  // options->target_file_size_base = 2 * 1048576;
 
   // 100GB config
   // options->write_buffer_size = 64 * 1048576;
@@ -170,8 +179,9 @@ void testScan(const std::string& key_path, rocksdb::DB* db,
 
   clock_gettime(CLOCK_MONOTONIC, &ts_start);
 
-  for (uint64_t i = 0; i < key_count; i++) {
+  for (uint64_t i = 0; i < 1000; i++) {
     key = htobe64(keys[i]);
+    std::cerr << std::hex << key << std::endl;
 
     rocksdb::Slice s_key(reinterpret_cast<const char*>(&key), sizeof(key));
     std::string s_value;
@@ -438,6 +448,28 @@ void benchClosedRangeQuery(rocksdb::DB* db, rocksdb::Options* options,
   std::cout << latencies;
 }
 
+void testIndexBlock(rocksdb::DB* db, rocksdb::Options* options) {
+  rocksdb::Iterator* it = db->NewIterator(rocksdb::ReadOptions());
+  assert(it->status().ok());
+  int cnt = 0;
+  printf("hi\n");
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+    printf("key_size: %ld, v size: %ld\n", it->key().size(),
+           it->value().size());
+    std::cout << std::atoi(it->key().ToString().c_str()) << ": "
+              << it->value().ToString() << std::endl;
+    ++cnt;
+    // if (cnt == 1000) break;
+  }
+  assert(it->status().ok());
+  delete it;
+  //   std::string stats = options->statistics->ToString();
+  //   size_t pos = stats.find("rocksdb.db.seek.micros statistics Percentiles");
+  //   size_t end_pos = stats.find("rocksdb.db.write.stall statistics
+  //   Percentiles"); std::string latencies = stats.substr(pos, (end_pos -
+  //   pos)); std::cout << latencies;
+}
+
 void printIO() {
   FILE* fp = fopen("/sys/block/sda/sda1/stat", "r");
   if (fp == NULL) {
@@ -511,7 +543,8 @@ int main(int argc, const char* argv[]) {
   uint64_t warmup_query_count = (uint64_t)atoi(argv[7]);
   uint64_t scan_length = 1;
 
-  const std::string kKeyPath = "poisson_timestamps.csv";
+  const std::string kKeyPath =
+      "/home/zxy/rocksdb/index_block_compression/poisson_timestamps.csv";
   const uint64_t kValueSize = 1000;
   const uint64_t kKeyRange = 10000000000000;
   const uint64_t kQueryCount = 50000;
@@ -537,7 +570,7 @@ int main(int argc, const char* argv[]) {
 
   //=========================================================================
 
-  // testScan(db, kKeyCount);
+  // testScan(kKeyPath, db, kKeyCount);
 
   uint64_t mem_free_before = getMemFree();
   uint64_t mem_available_before = getMemAvailable();
@@ -567,6 +600,8 @@ int main(int argc, const char* argv[]) {
     benchOpenRangeQuery(db, &options, kKeyRange, kQueryCount, scan_length);
   else if (query_type == 3)
     benchClosedRangeQuery(db, &options, kKeyRange, kQueryCount, range_size);
+  else if (query_type == 4)
+    testScan(kKeyPath, db, kKeyCount);
 
   uint64_t io_after = getIOCount();
   // mem_free_after = getMemFree();
